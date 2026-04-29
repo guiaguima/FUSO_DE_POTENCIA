@@ -1,0 +1,5 @@
+math
+pandas
+plotly.express
+fpdf
+datetime

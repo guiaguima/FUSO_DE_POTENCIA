@@ -133,53 +133,53 @@ with tab3:
     st.write(f"Para manter a eficiência, recomenda-se a relubrificação com **{vol_relub:.2f} cm³** de graxa.")
     st.write(f"Baseado no uso de {horas_dia}h/dia, o ciclo estimado é a cada **{int(dias_lub)} dias**.")
 
-# --- GERADOR DE PDF ---
-# --- FUNÇÃO GERADORA DE PDF CORRIGIDA ---
+# --- FUNÇÃO GERADORA DE PDF (VERSÃO ROBUSTA) ---
 def gerar_pdf():
-    pdf = FPDF()
+    # 'P' = Portrait (Retrato), 'mm' = milímetros, 'A4' = formato
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
+    
+    # Usar 'Helvetica' ou 'Arial' (fontes padrão que não corrompem)
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(190, 10, "Relatorio Tecnico de Dimensionamento", ln=True, align="C")
     
     pdf.set_font("Helvetica", "", 11)
     pdf.ln(10)
     pdf.cell(0, 7, f"Data: {datetime.date.today()}", ln=True)
-    pdf.cell(0, 7, f"Fuso: {tipo_fuso} {d_nom}x{passo}mm", ln=True)
+    pdf.cell(0, 7, f"Tipo de Fuso: {tipo_fuso}", ln=True)
+    pdf.cell(0, 7, f"Geometria: {d_nom}mm x {passo}mm", ln=True)
     pdf.cell(0, 7, f"Carga Axial: {carga} N", ln=True)
     pdf.cell(0, 7, f"Torque Calculado: {tr_nm:.2f} N.m", ln=True)
     pdf.cell(0, 7, f"Potencia Calculada: {potencia_w:.2f} W", ln=True)
     pdf.cell(0, 7, f"Velocidade Critica: {int(n_critica)} RPM", ln=True)
-    pdf.cell(0, 7, f"Fator de Seguranca Flambagem: {fs_flambagem:.2f}", ln=True)
+    pdf.cell(0, 7, f"Fator de Seguranca: {fs_flambagem:.2f}", ln=True)
     
     if tipo_fuso == "Esferas":
-        pdf.cell(0, 7, f"Vida Util Estimada (L10): {int(l10_horas)} horas", ln=True)
+        pdf.cell(0, 7, f"Vida Util L10: {int(l10_horas)} horas", ln=True)
     
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "Notas de Manutencao:", ln=True)
+    pdf.cell(0, 10, "Plano de Manutencao:", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 7, f"- Relubrificar com {vol_relub:.2f} cm3 a cada {int(dias_lub)} dias.", ln=True)
+    pdf.cell(0, 7, f"- Volume de Graxa: {vol_relub:.2f} cm3", ln=True)
+    pdf.cell(0, 7, f"- Ciclo: A cada {int(dias_lub)} dias.", ln=True)
     
-    # Retorna o PDF como uma string de bytes bruta
+    # O output() na fpdf2 v2.x já retorna um bytearray pronto
     return pdf.output()
 
-# --- BOTÃO DE EXPORTAÇÃO CORRIGIDO ---
+# --- BOTÃO DE DOWNLOAD (INTERFACE STREAMLIT) ---
 st.sidebar.divider()
-if st.sidebar.button("📄 Gerar Relatório Técnico"):
-    try:
-        pdf_content = gerar_pdf()
-        
-        # Verifica se o conteúdo veio como string ou bytes e trata adequadamente
-        if isinstance(pdf_content, str):
-            data_to_download = pdf_content.encode('latin-1')
-        else:
-            data_to_download = bytes(pdf_content)
-
-        st.sidebar.download_button(
-            label="📥 Baixar PDF",
-            data=data_to_download,
-            file_name="Memoria_Calculo_Fuso.pdf",
-            mime="application/pdf"
-        )
-    except Exception as e:
-        st.sidebar.error(f"Erro ao gerar PDF: {e}")
+try:
+    # Geramos o conteúdo do PDF
+    pdf_output = gerar_pdf()
+    
+    # Importante: fpdf2.output() retorna um bytearray. 
+    # O Streamlit aceita o bytearray diretamente.
+    st.sidebar.download_button(
+        label="📥 Baixar Relatório Técnico",
+        data=pdf_output,
+        file_name="Memoria_Calculo_Fuso.pdf",
+        mime="application/pdf"
+    )
+except Exception as e:
+    st.sidebar.error(f"Erro ao preparar PDF: {e}")

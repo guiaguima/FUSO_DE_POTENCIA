@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 from fpdf import FPDF
 import datetime
+import io
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Engenharia de Fusos Pro", layout="wide", page_icon="⚙️")
@@ -132,27 +133,26 @@ with tab3:
     st.subheader("Plano de Lubrificação")
     st.write(f"Para manter a eficiência, recomenda-se a relubrificação com **{vol_relub:.2f} cm³** de graxa.")
     st.write(f"Baseado no uso de {horas_dia}h/dia, o ciclo estimado é a cada **{int(dias_lub)} dias**.")
-
-# --- FUNÇÃO GERADORA DE PDF (VERSÃO ROBUSTA) ---
+# --- FUNÇÃO GERADORA DE PDF (VIA BUFFER DE MEMÓRIA) ---
 def gerar_pdf():
-    # 'P' = Portrait (Retrato), 'mm' = milímetros, 'A4' = formato
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     
-    # Usar 'Helvetica' ou 'Arial' (fontes padrão que não corrompem)
+    # Título Principal
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(190, 10, "Relatorio Tecnico de Dimensionamento", ln=True, align="C")
-    
-    pdf.set_font("Helvetica", "", 11)
     pdf.ln(10)
+    
+    # Dados Técnicos (Removido acentos para evitar corrupção)
+    pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, f"Data: {datetime.date.today()}", ln=True)
     pdf.cell(0, 7, f"Tipo de Fuso: {tipo_fuso}", ln=True)
     pdf.cell(0, 7, f"Geometria: {d_nom}mm x {passo}mm", ln=True)
     pdf.cell(0, 7, f"Carga Axial: {carga} N", ln=True)
-    pdf.cell(0, 7, f"Torque Calculado: {tr_nm:.2f} N.m", ln=True)
-    pdf.cell(0, 7, f"Potencia Calculada: {potencia_w:.2f} W", ln=True)
+    pdf.cell(0, 7, f"Torque: {tr_nm:.2f} N.m", ln=True)
+    pdf.cell(0, 7, f"Potencia: {potencia_w:.2f} W", ln=True)
     pdf.cell(0, 7, f"Velocidade Critica: {int(n_critica)} RPM", ln=True)
-    pdf.cell(0, 7, f"Fator de Seguranca: {fs_flambagem:.2f}", ln=True)
+    pdf.cell(0, 7, f"FS Flambagem: {fs_flambagem:.2f}", ln=True)
     
     if tipo_fuso == "Esferas":
         pdf.cell(0, 7, f"Vida Util L10: {int(l10_horas)} horas", ln=True)
@@ -162,24 +162,36 @@ def gerar_pdf():
     pdf.cell(0, 10, "Plano de Manutencao:", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, f"- Volume de Graxa: {vol_relub:.2f} cm3", ln=True)
-    pdf.cell(0, 7, f"- Ciclo: A cada {int(dias_lub)} dias.", ln=True)
+    pdf.cell(0, 7, f"- Ciclo Sugerido: {int(dias_lub)} dias.", ln=True)
     
-    # O output() na fpdf2 v2.x já retorna um bytearray pronto
-    return pdf.output()
+    # GERANDO O PDF EM MEMÓRIA
+    # output(dest='S') retorna uma string/bytearray que injetamos no buffer
+    pdf_str = pdf.output() 
+    
+    # Criamos o buffer e garantimos que os dados sejam bytes
+    buffer = io.BytesIO()
+    if isinstance(pdf_str, str):
+        buffer.write(pdf_str.encode('latin-1'))
+    else:
+        buffer.write(pdf_str)
+    
+    buffer.seek(0) # Volta para o início do arquivo virtual
+    return buffer
 
-# --- BOTÃO DE DOWNLOAD (INTERFACE STREAMLIT) ---
+# --- BOTÃO DE DOWNLOAD NA SIDEBAR ---
 st.sidebar.divider()
+st.sidebar.subheader("Exportar Resultados")
+
+# Gerar o buffer fora do clique (para o Streamlit pré-carregar)
 try:
-    # Geramos o conteúdo do PDF
-    pdf_output = gerar_pdf()
+    pdf_buffer = gerar_pdf()
     
-    # Importante: fpdf2.output() retorna um bytearray. 
-    # O Streamlit aceita o bytearray diretamente.
     st.sidebar.download_button(
-        label="📥 Baixar Relatório Técnico",
-        data=pdf_output,
-        file_name="Memoria_Calculo_Fuso.pdf",
+        label="📥 Baixar Memoria de Calculo",
+        data=pdf_buffer,
+        file_name=f"Calculo_Fuso_{datetime.date.today()}.pdf",
         mime="application/pdf"
     )
 except Exception as e:
+    st.sidebar.error(f"Erro na geracao: {e}")eption as e:
     st.sidebar.error(f"Erro ao preparar PDF: {e}")

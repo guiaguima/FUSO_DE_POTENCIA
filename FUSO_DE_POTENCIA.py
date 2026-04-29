@@ -48,9 +48,8 @@ else:
 # --- BLOCO DE CÁLCULOS ---
 g = 9.81
 ang_rad = math.radians(angulo_deg)
-mu_guia = atrito_guias_map[mat_guia] # Coeficiente de atrito da guia selecionada
+mu_guia = atrito_guias_map[mat_guia]
 
-# Forças e Momentos
 f_grav_ax = massa_kg * g * math.sin(ang_rad)
 f_norm_peso = massa_kg * g * math.cos(ang_rad)
 momento_tomb = (massa_kg * g) * (dist_excentrica / 1000)
@@ -59,7 +58,6 @@ f_atrito_guias = mu_guia * (f_norm_peso + (f_normal_extra * 2))
 f_inercia = massa_kg * ((v_alvo/1000)/t_acc)
 f_axial_total = f_grav_ax + f_atrito_guias + f_inercia
 
-# Dinâmica Rotacional
 rpm = (v_alvo * 60) / passo
 omega = (2 * math.pi * rpm) / 60
 d_medio = (d_nom + d_nuc) / 2
@@ -73,7 +71,6 @@ else:
     tr_nm = (f_axial_total * passo) / (2 * math.pi * 0.9 * 1000)
     eficiencia = 0.90
 
-# Inércia Rotacional do Fuso
 m_fuso = (math.pi * (d_nom/2000)**2) * comprimento * 7850
 j_fuso = 0.5 * m_fuso * (d_nom/2000)**2
 torque_pico = tr_nm + (j_fuso * (omega / t_acc))
@@ -133,6 +130,7 @@ with tab3:
         vol_graxa = (d_nom * passo) * 0.0015
         st.write(f"Volume de Graxa Sugerido: **{vol_graxa:.2f} cm³**")
         st.write(f"Calor Dissipado: **{p_calor:.1f} W**")
+        st.info("**Intervalos Sugeridos:**\n* A cada **200 km** de percurso\n* Ou a cada **500 horas** de uso")
     with col6:
         st.subheader("Vida Útil e Motores")
         if tipo_fuso == "Esferas":

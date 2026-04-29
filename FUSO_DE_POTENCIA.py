@@ -1,6 +1,6 @@
 import streamlit as st
 import math
-import pd
+import pandas as pd
 import plotly.express as px
 
 # --- CONFIGURAÇÃO ---

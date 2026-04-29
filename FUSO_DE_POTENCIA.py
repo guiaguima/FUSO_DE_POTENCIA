@@ -12,6 +12,7 @@ motores_nema = {
     "NEMA 34": {"torque": 8.5}, "Servo 400W": {"torque": 1.27}
 }
 atrito_porca_map = {"Bronze": 0.12, "Plástico/Nylon": 0.08, "Aço": 0.20}
+atrito_guias_map = {"Guia Linear (Esferas)": 0.005, "Deslizamento (Bucha/Plástico)": 0.15, "Metal sobre Metal": 0.25}
 fatores_apoio = {"Simples-Simples": 0.97, "Fixo-Simples": 1.51, "Fixo-Fixo": 2.19, "Fixo-Livre": 0.34}
 
 st.title("⚙️ Analisador Especialista de Fusos")
@@ -25,13 +26,14 @@ passo = st.sidebar.number_input("Passo (mm)", value=5.0)
 comprimento = st.sidebar.number_input("Comprimento Livre (m)", value=1.0)
 tipo_apoio = st.sidebar.selectbox("Fixação das Extremidades", list(fatores_apoio.keys()))
 
-st.sidebar.header("2. Orientação e Excentricidade")
+st.sidebar.header("2. Guias e Orientação")
+mat_guia = st.sidebar.selectbox("Tipo de Guia de Apoio", list(atrito_guias_map.keys()))
 angulo_deg = st.sidebar.slider("Inclinação (0° Horiz - 90° Vert)", 0, 90, 0)
 massa_kg = st.sidebar.number_input("Massa da Carga (kg)", value=50.0)
 dist_excentrica = st.sidebar.number_input("Braço de Alavanca (mm)", value=100.0)
 dist_patins = st.sidebar.number_input("Distância entre Patins (mm)", value=200.0)
 
-st.sidebar.header("3. Operação e Ambiente")
+st.sidebar.header("3. Operação")
 v_alvo = st.sidebar.number_input("Velocidade (mm/s)", value=50.0)
 t_acc = st.sidebar.number_input("Tempo de Aceleração (s)", value=0.1)
 t_ambiente = st.sidebar.slider("Temp. Ambiente (°C)", 10, 50, 25)
@@ -46,8 +48,9 @@ else:
 # --- BLOCO DE CÁLCULOS ---
 g = 9.81
 ang_rad = math.radians(angulo_deg)
-mu_guia = 0.005 
+mu_guia = atrito_guias_map[mat_guia] # Coeficiente de atrito da guia selecionada
 
+# Forças e Momentos
 f_grav_ax = massa_kg * g * math.sin(ang_rad)
 f_norm_peso = massa_kg * g * math.cos(ang_rad)
 momento_tomb = (massa_kg * g) * (dist_excentrica / 1000)
@@ -56,6 +59,7 @@ f_atrito_guias = mu_guia * (f_norm_peso + (f_normal_extra * 2))
 f_inercia = massa_kg * ((v_alvo/1000)/t_acc)
 f_axial_total = f_grav_ax + f_atrito_guias + f_inercia
 
+# Dinâmica Rotacional
 rpm = (v_alvo * 60) / passo
 omega = (2 * math.pi * rpm) / 60
 d_medio = (d_nom + d_nuc) / 2
@@ -69,6 +73,7 @@ else:
     tr_nm = (f_axial_total * passo) / (2 * math.pi * 0.9 * 1000)
     eficiencia = 0.90
 
+# Inércia Rotacional do Fuso
 m_fuso = (math.pi * (d_nom/2000)**2) * comprimento * 7850
 j_fuso = 0.5 * m_fuso * (d_nom/2000)**2
 torque_pico = tr_nm + (j_fuso * (omega / t_acc))
@@ -86,68 +91,58 @@ p_calor = (potencia_pico / eficiencia) - potencia_pico if eficiencia > 0 else 0
 area_dissip = (math.pi * d_nom/10) * (comprimento * 100)
 t_final = t_ambiente + (p_calor / (area_dissip * 0.002))
 
-# --- DASHBOARD INICIAL (MÉTRICAS) ---
+# --- DASHBOARD ---
 st.subheader("📊 Métricas de Performance")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Torque de Pico", f"{torque_pico:.2f} N.m")
-m2.metric("Rotação Motor", f"{int(rpm)} RPM")
-m3.metric("Potência de Pico", f"{potencia_pico:.1f} W")
-m4.metric("Temp. Estimada", f"{int(t_final)} °C")
+m2.metric("Rotação", f"{int(rpm)} RPM")
+m3.metric("Potência", f"{potencia_pico:.1f} W")
+m4.metric("Temp. Est.", f"{int(t_final)} °C")
 
 st.divider()
 
-# --- ABA DE GRÁFICOS E ANÁLISES ---
-tab_graf, tab_seg, tab_manut = st.tabs(["📈 Gráficos e Dinâmica", "🛡️ Segurança e Precisão", "💧 Manutenção e Motores"])
+tab1, tab2, tab3 = st.tabs(["🚀 Dinâmica", "🛡️ Segurança", "💧 Manutenção"])
 
-with tab_graf:
-    col_g1, col_g2 = st.columns(2)
-    
-    with col_g1:
-        st.write("**Decomposição de Forças Axiais (N)**")
-        df_forcas = pd.DataFrame({
-            "Origem": ["Gravidade", "Atrito Guias", "Inércia"],
-            "Força (N)": [f_grav_ax, f_atrito_guias, f_inercia]
-        })
+with tab1:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("**Distribuição de Forças**")
+        df_forcas = pd.DataFrame({"Origem": ["Gravidade", "Atrito Guias", "Inércia"], "Força (N)": [f_grav_ax, f_atrito_guias, f_inercia]})
         st.plotly_chart(px.bar(df_forcas, x="Origem", y="Força (N)", color="Origem", text_auto='.1f'), use_container_width=True)
-        
-    with col_g2:
-        st.write("**Perfil de Velocidade de Avanço**")
-        # Gráfico simples de trapézio de velocidade
-        fig_vel = px.line(x=[0, t_acc, t_acc+1, t_acc+1.1], y=[0, v_alvo, v_alvo, 0], 
-                          labels={'x':'Tempo (s)', 'y':'Velocidade (mm/s)'}, title="Rampa de Aceleração")
+    with col2:
+        st.write("**Perfil de Velocidade**")
+        fig_vel = px.line(x=[0, t_acc, t_acc+1, t_acc+1.1], y=[0, v_alvo, v_alvo, 0], labels={'x':'Tempo (s)', 'y':'Velocidade (mm/s)'})
         st.plotly_chart(fig_vel, use_container_width=True)
 
-with tab_seg:
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.subheader("Limites Estruturais")
+with tab2:
+    col3, col4 = st.columns(2)
+    with col3:
+        st.subheader("Vibração e Flambagem")
         st.write(f"Velocidade Crítica: **{int(n_critica)} RPM**")
-        st.write(f"Carga de Flambagem: **{carga_critica:.1f} N**")
-        if rpm > n_critica * 0.8: st.error("⚠️ Rotação excessiva!")
-        else: st.success("✅ Velocidade dentro do limite seguro.")
-        
-    with col_s2:
+        st.write(f"Fator de Segurança (Flambagem): **{fs_flambagem:.2f}**")
+        if rpm > n_critica * 0.8: st.error("⚠️ Rotação próxima ao limite crítico!")
+    with col4:
         st.subheader("Precisão")
         def_mm = (f_axial_total * (comprimento * 1000)) / (((math.pi * d_nuc**2)/4) * 210000)
-        st.metric("Deformação do Fuso", f"{def_mm*1000:.1f} µm")
-        st.caption("Valor referente ao encurtamento/alongamento elástico do aço sob carga axial.")
+        st.metric("Deformação Elástica", f"{def_mm*1000:.1f} µm")
 
-with tab_manut:
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
+with tab3:
+    col5, col6 = st.columns(2)
+    with col5:
         st.subheader("Lubrificação")
         vol_graxa = (d_nom * passo) * 0.0015
-        st.write(f"Volume sugerido: **{vol_graxa:.2f} cm³**")
-        st.write(f"Calor Gerado: **{p_calor:.1f} Watts**")
+        st.write(f"Volume de Graxa Sugerido: **{vol_graxa:.2f} cm³**")
+        st.write(f"Calor Dissipado: **{p_calor:.1f} W**")
+    with col6:
+        st.subheader("Vida Útil e Motores")
+        if tipo_fuso == "Esferas":
+            l10 = (ca_dinamico / (f_axial_total * 1.2))**3 * 10**6 / (rpm * 60) if rpm > 0 else 0
+            st.write(f"Vida L10 estimada: **{int(l10)} horas**")
+        else:
+            pv = (f_axial_total / (d_nom * altura_porca)) * ((rpm * passo) / 60000)
+            st.write(f"Fator PV: **{pv:.3f} MPa.m/s**")
         
-    with col_m2:
-        st.subheader("Sugestão de Motorização")
-        motor_encontrado = False
         for motor, dados in motores_nema.items():
             if dados['torque'] > torque_pico * 1.5:
-                st.success(f"Recomendado: **{motor}**")
-                st.write(f"Capacidade: {dados['torque']} N.m")
-                motor_encontrado = True
+                st.success(f"Motor Recomendado: **{motor}**")
                 break
-        if not motor_encontrado:
-            st.error("⚠️ Torque necessário excede NEMA 34. Considere Redutores.")

@@ -133,24 +133,24 @@ with tab3:
     st.subheader("Plano de Lubrificação")
     st.write(f"Para manter a eficiência, recomenda-se a relubrificação com **{vol_relub:.2f} cm³** de graxa.")
     st.write(f"Baseado no uso de {horas_dia}h/dia, o ciclo estimado é a cada **{int(dias_lub)} dias**.")
-# --- FUNÇÃO GERADORA DE PDF (VIA BUFFER DE MEMÓRIA) ---
+    
+# --- FUNÇÃO GERADORA DE PDF ---
 def gerar_pdf():
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
     
-    # Título Principal
+    # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(190, 10, "Relatorio Tecnico de Dimensionamento", ln=True, align="C")
-    pdf.ln(10)
+    pdf.ln(5)
     
-    # Dados Técnicos (Removido acentos para evitar corrupção)
+    # Conteúdo Principal
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, f"Data: {datetime.date.today()}", ln=True)
-    pdf.cell(0, 7, f"Tipo de Fuso: {tipo_fuso}", ln=True)
-    pdf.cell(0, 7, f"Geometria: {d_nom}mm x {passo}mm", ln=True)
+    pdf.cell(0, 7, f"Fuso: {tipo_fuso} - {d_nom}mm x {passo}mm", ln=True)
     pdf.cell(0, 7, f"Carga Axial: {carga} N", ln=True)
-    pdf.cell(0, 7, f"Torque: {tr_nm:.2f} N.m", ln=True)
-    pdf.cell(0, 7, f"Potencia: {potencia_w:.2f} W", ln=True)
+    pdf.cell(0, 7, f"Torque Requerido: {tr_nm:.2f} N.m", ln=True)
+    pdf.cell(0, 7, f"Potencia Calculada: {potencia_w:.2f} W", ln=True)
     pdf.cell(0, 7, f"Velocidade Critica: {int(n_critica)} RPM", ln=True)
     pdf.cell(0, 7, f"FS Flambagem: {fs_flambagem:.2f}", ln=True)
     
@@ -159,39 +159,28 @@ def gerar_pdf():
     
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "Plano de Manutencao:", ln=True)
+    pdf.cell(0, 10, "Manutencao:", ln=True)
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 7, f"- Volume de Graxa: {vol_relub:.2f} cm3", ln=True)
-    pdf.cell(0, 7, f"- Ciclo Sugerido: {int(dias_lub)} dias.", ln=True)
+    pdf.cell(0, 7, f"- Relubrificacao: {vol_relub:.2f} cm3", ln=True)
+    pdf.cell(0, 7, f"- Ciclo: A cada {int(dias_lub)} dias.", ln=True)
     
-    # GERANDO O PDF EM MEMÓRIA
-    # output(dest='S') retorna uma string/bytearray que injetamos no buffer
-    pdf_str = pdf.output() 
-    
-    # Criamos o buffer e garantimos que os dados sejam bytes
-    buffer = io.BytesIO()
-    if isinstance(pdf_str, str):
-        buffer.write(pdf_str.encode('latin-1'))
-    else:
-        buffer.write(pdf_str)
-    
-    buffer.seek(0) # Volta para o início do arquivo virtual
-    return buffer
+    # Gera os bytes do PDF
+    return pdf.output()
 
-# --- BOTÃO DE DOWNLOAD NA SIDEBAR ---
+# --- BLOCO DO BOTÃO NA SIDEBAR (SEM ERRO DE SINTAXE) ---
 st.sidebar.divider()
-st.sidebar.subheader("Exportar Resultados")
+st.sidebar.subheader("Exportar Relatório")
 
-# Gerar o buffer fora do clique (para o Streamlit pré-carregar)
 try:
-    pdf_buffer = gerar_pdf()
+    # Geramos o bytearray do PDF
+    pdf_data = gerar_pdf()
     
+    # O download_button do Streamlit lida bem com bytearrays
     st.sidebar.download_button(
-        label="📥 Baixar Memoria de Calculo",
-        data=pdf_buffer,
-        file_name=f"Calculo_Fuso_{datetime.date.today()}.pdf",
+        label="📥 Baixar PDF",
+        data=pdf_data,
+        file_name="Memoria_Calculo.pdf",
         mime="application/pdf"
     )
 except Exception as e:
-    st.sidebar.error(f"Erro na geracao: {e}")eption as e:
-    st.sidebar.error(f"Erro ao preparar PDF: {e}")
+    st.sidebar.error(f"Erro ao gerar relatório: {e}")

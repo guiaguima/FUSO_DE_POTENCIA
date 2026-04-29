@@ -134,6 +134,7 @@ with tab3:
     st.write(f"Baseado no uso de {horas_dia}h/dia, o ciclo estimado é a cada **{int(dias_lub)} dias**.")
 
 # --- GERADOR DE PDF ---
+# --- FUNÇÃO GERADORA DE PDF CORRIGIDA ---
 def gerar_pdf():
     pdf = FPDF()
     pdf.add_page()
@@ -159,15 +160,26 @@ def gerar_pdf():
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, f"- Relubrificar com {vol_relub:.2f} cm3 a cada {int(dias_lub)} dias.", ln=True)
     
+    # Retorna o PDF como uma string de bytes bruta
     return pdf.output()
 
-# Download na Sidebar
+# --- BOTÃO DE EXPORTAÇÃO CORRIGIDO ---
 st.sidebar.divider()
 if st.sidebar.button("📄 Gerar Relatório Técnico"):
-    pdf_bytes = gerar_pdf()
-    st.sidebar.download_button(
-        label="📥 Baixar PDF",
-        data=bytes(pdf_bytes),
-        file_name="Memoria_Calculo_Fuso.pdf",
-        mime="application/pdf"
-    )
+    try:
+        pdf_content = gerar_pdf()
+        
+        # Verifica se o conteúdo veio como string ou bytes e trata adequadamente
+        if isinstance(pdf_content, str):
+            data_to_download = pdf_content.encode('latin-1')
+        else:
+            data_to_download = bytes(pdf_content)
+
+        st.sidebar.download_button(
+            label="📥 Baixar PDF",
+            data=data_to_download,
+            file_name="Memoria_Calculo_Fuso.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.sidebar.error(f"Erro ao gerar PDF: {e}")

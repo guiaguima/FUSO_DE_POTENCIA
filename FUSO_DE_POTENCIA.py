@@ -62,28 +62,30 @@ rpm = (v_alvo * 60) / passo
 omega = (2 * math.pi * rpm) / 60
 d_medio = (d_nom + d_nuc) / 2
 
+# Lógica de Irreversibilidade (Cálculo do ângulo de hélice)
+angulo_helice = math.atan(passo / (math.pi * d_medio))
+
 if tipo_fuso == "Trapezoidal":
     mu_f = atrito_porca_map[mat_p]
-    sec_alfa = 1.03
+    angulo_atrito = math.atan(mu_f)
+    irreversivel = angulo_atrito > angulo_helice
+    sec_alfa = 1.03 # Para roscas ISO trapezoidais 30°
     tr_nm = (f_axial_total * d_medio / 2 * ((passo + math.pi*mu_f*d_medio*sec_alfa)/(math.pi*d_medio - mu_f*passo*sec_alfa))) / 1000
     eficiencia = 0.35
 else:
+    irreversivel = False # Fusos de esferas quase nunca são irreversíveis
     tr_nm = (f_axial_total * passo) / (2 * math.pi * 0.9 * 1000)
     eficiencia = 0.90
 
+# Inércias e Potência
 m_fuso = (math.pi * (d_nom/2000)**2) * comprimento * 7850
 j_fuso = 0.5 * m_fuso * (d_nom/2000)**2
 torque_pico = tr_nm + (j_fuso * (omega / t_acc))
 potencia_pico = torque_pico * omega
 
-# Segurança e Térmico
-E_aco = 2.1e11
-I_fuso = (math.pi * (d_nuc/1000)**4) / 64
-m_fuso_lin = (math.pi * (d_nuc/2000)**2) * 7850
-n_critica = (fatores_apoio[tipo_apoio] * 9.55 * (math.pi / comprimento**2) * math.sqrt((E_aco * I_fuso) / m_fuso_lin))
-carga_critica = (math.pi**2 * E_aco * I_fuso) / (2.0 * comprimento)**2
-fs_flambagem = carga_critica / f_axial_total if f_axial_total > 0 else 100
-
+# Térmico e PV
+v_desl = (rpm * passo) / 60000
+pv = (f_axial_total / (d_nom * altura_porca)) * v_desl
 p_calor = (potencia_pico / eficiencia) - potencia_pico if eficiencia > 0 else 0
 area_dissip = (math.pi * d_nom/10) * (comprimento * 100)
 t_final = t_ambiente + (p_calor / (area_dissip * 0.002))
@@ -92,7 +94,7 @@ t_final = t_ambiente + (p_calor / (area_dissip * 0.002))
 st.subheader("📊 Métricas de Performance")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Torque de Pico", f"{torque_pico:.2f} N.m")
-m2.metric("Rotação", f"{int(rpm)} RPM")
+m2.metric("Rotação Motor", f"{int(rpm)} RPM")
 m3.metric("Potência", f"{potencia_pico:.1f} W")
 m4.metric("Temp. Est.", f"{int(t_final)} °C")
 
@@ -103,7 +105,7 @@ tab1, tab2, tab3 = st.tabs(["🚀 Dinâmica", "🛡️ Segurança", "💧 Manute
 with tab1:
     col1, col2 = st.columns(2)
     with col1:
-        st.write("**Distribuição de Forças**")
+        st.write("**Distribuição de Forças Axiais**")
         df_forcas = pd.DataFrame({"Origem": ["Gravidade", "Atrito Guias", "Inércia"], "Força (N)": [f_grav_ax, f_atrito_guias, f_inercia]})
         st.plotly_chart(px.bar(df_forcas, x="Origem", y="Força (N)", color="Origem", text_auto='.1f'), use_container_width=True)
     with col2:
@@ -114,45 +116,43 @@ with tab1:
 with tab2:
     col3, col4 = st.columns(2)
     with col3:
-        st.subheader("Vibração e Flambagem")
-        st.write(f"Velocidade Crítica: **{int(n_critica)} RPM**")
-        st.write(f"Fator de Segurança (Flambagem): **{fs_flambagem:.2f}**")
-        if rpm > n_critica * 0.8: st.error("⚠️ Rotação próxima ao limite crítico!")
+        st.subheader("Estabilidade e Travamento")
+        if angulo_deg > 0:
+            if irreversivel:
+                st.success("🔒 **Sistema Irreversível:** A carga NÃO deve descer sozinha em caso de falha no motor (Auto-travante).")
+            else:
+                st.error("⚠️ **Risco de Recuo:** A carga PODE descer sozinha. Considere um freio motor ou fuso com menor passo.")
+        else:
+            st.info("ℹ️ Sistema Horizontal: Sem risco de recuo por gravidade.")
+        
+        st.caption(f"Ângulo de Hélice: {math.degrees(angulo_helice):.2f}°")
+        
     with col4:
-        st.subheader("Precisão")
+        st.subheader("Precisão e Flambagem")
         def_mm = (f_axial_total * (comprimento * 1000)) / (((math.pi * d_nuc**2)/4) * 210000)
-        st.metric("Deformação Elástica", f"{def_mm*1000:.1f} µm")
+        st.metric("Deformação Axial", f"{def_mm*1000:.1f} µm")
+        st.write(f"Fator de Segurança (Flambagem): **{fs_flambagem:.2f}**")
 
 with tab3:
     col5, col6 = st.columns(2)
     with col5:
-        st.subheader("Lubrificação")
+        st.subheader("Plano de Lubrificação Adaptativo")
         vol_graxa = (d_nom * passo) * 0.0015
-        st.write(f"Volume de Graxa Sugerido: **{vol_graxa:.2f} cm³**")
-        st.write(f"Calor Dissipado: **{p_calor:.1f} W**")
-        st.info("**Intervalos Sugeridos:**\n* A cada **200 km** de percurso\n* Ou a cada **500 horas** de uso")
-    with col6:
-        st.subheader("Saúde do Fuso e Desgaste")
-        if tipo_fuso == "Esferas":
-            l10 = (ca_dinamico / (f_axial_total * 1.2))**3 * 10**6 / (rpm * 60) if rpm > 0 else 0
-            st.write(f"Vida L10 estimada: **{int(l10)} horas**")
-        else:
-            # Cálculo do Fator PV
-            area_contato = d_nom * altura_porca
-            v_desl = (rpm * passo) / 60000 # m/s
-            pv = (f_axial_total / area_contato) * v_desl
-            
-            st.write(f"Fator PV: **{pv:.4f} MPa.m/s**")
-            
-            # Indicação de Saúde PV
-            if pv < 0.1:
-                st.success("✅ Fator PV Ótimo: Baixo desgaste e temperatura controlada.")
-            elif pv < 0.2:
-                st.warning("⚠️ Fator PV Moderado: Requer lubrificação frequente. Monitorar aquecimento.")
-            else:
-                st.error("🚨 Fator PV Crítico: Risco de deformação da porca e falha prematura!")
+        st.write(f"Volume sugerido: **{vol_graxa:.2f} cm³**")
         
-        st.divider()
+        if pv > 0.15 or t_final > 60:
+            st.warning("⚠️ **Alta Demanda:** Lubrificar a cada **100 km** ou **250 horas**.")
+        else:
+            st.success("✅ **Demanda Normal:** Lubrificar a cada **200 km** ou **500 horas**.")
+        
+    with col6:
+        st.subheader("Saúde PV e Motor")
+        if tipo_fuso == "Trapezoidal":
+            st.write(f"Fator PV: **{pv:.4f} MPa.m/s**")
+            if pv < 0.1: st.success("PV Ótimo")
+            elif pv < 0.2: st.warning("PV Moderado")
+            else: st.error("PV Crítico")
+        
         for motor, dados in motores_nema.items():
             if dados['torque'] > torque_pico * 1.5:
                 st.write(f"Motor sugerido: **{motor}**")
